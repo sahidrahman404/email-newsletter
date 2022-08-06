@@ -1,13 +1,9 @@
-use actix_web::{web, App, HttpResponse, HttpServer, Responder};
-
-async fn health_check() -> impl Responder {
-    HttpResponse::Ok()
-}
+//! src/health_check.rs
+use newsletter::run;
+use std::net::TcpListener;
 
 #[tokio::main]
 async fn main() -> std::io::Result<()> {
-    HttpServer::new(|| App::new().route("/health_check", web::get().to(health_check)))
-        .bind("localhost:3005")?
-        .run()
-        .await
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    run(listener)?.await
 }
