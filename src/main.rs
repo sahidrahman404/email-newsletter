@@ -1,5 +1,5 @@
 //! src/health_check.rs
-use newsletter::run;
+use newsletter::startup::run;
 use std::net::TcpListener;
 
 #[tokio::main]
