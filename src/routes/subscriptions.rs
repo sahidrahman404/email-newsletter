@@ -1,6 +1,7 @@
 use actix_web::{web, HttpResponse};
 use chrono::Utc;
 use sqlx::PgPool;
+use tracing::Instrument;
 use uuid::Uuid;
 
 #[derive(serde::Deserialize)]
@@ -16,17 +17,23 @@ pub async fn subscribe(
 ) -> HttpResponse {
     // Let's generate a random unique identifier
     let request_id = Uuid::new_v4();
-    tracing::info!(
-        "request_id {} - Adding '{}' '{}' as a new subscriber.",
-        request_id,
-        form.email,
-        form.name
+
+    // Spans, like logs, have an associated level
+    // `info_span` creates a span at the info-level
+    let request_span = tracing::info_span!(
+    "Adding a new subscriber.",
+    %request_id,
+    subscriber_email = %form.email,
+    subscriber_name= %form.name
     );
 
-    tracing::info!(
-        "request_id {} - Saving new subscriber details in the database",
-        request_id
-    );
+    let _request_span_guard = request_span.enter();
+
+    // We do not call `.enter` on query_span!
+    // `.instrument` takes care of it at the right moments
+    // in the query future lifetime
+    let query_span = tracing::info_span!("Saving new subscriber details in the database");
+
     match sqlx::query!(
         r#"
 INSERT INTO subscriptions (id, email, name, subscribed_at)
@@ -40,15 +47,11 @@ VALUES ($1, $2, $3, $4)
     // We use `get_ref` to get an immutable reference to the `PgConnection`
     // wrapped by `web::Data`.
     .execute(connection.get_ref())
+    // First we attach the instrumentation, then we `.await` it
+    .instrument(query_span)
     .await
     {
-        Ok(_) => {
-            tracing::info!(
-                "request_id {} - New subscriber details have been saved",
-                request_id
-            );
-            HttpResponse::Ok().finish()
-        }
+        Ok(_) => HttpResponse::Ok().finish(),
         Err(e) => {
             tracing::error!(
                 "request_id {} - Failed to execute query: {:?}",
