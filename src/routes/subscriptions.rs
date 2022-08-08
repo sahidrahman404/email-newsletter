@@ -10,28 +10,20 @@ pub struct FormData {
     name: String,
 }
 
+#[tracing::instrument(
+name = "Adding a new subscriber",
+skip(form, connection),
+fields(
+request_id = %Uuid::new_v4(),
+subscriber_email = %form.email,
+subscriber_name= %form.name
+)
+)]
 pub async fn subscribe(
     form: web::Form<FormData>,
     // Retrieving a connection from the application state!
     connection: web::Data<PgPool>,
 ) -> HttpResponse {
-    // Let's generate a random unique identifier
-    let request_id = Uuid::new_v4();
-
-    // Spans, like logs, have an associated level
-    // `info_span` creates a span at the info-level
-    let request_span = tracing::info_span!(
-    "Adding a new subscriber.",
-    %request_id,
-    subscriber_email = %form.email,
-    subscriber_name= %form.name
-    );
-
-    let _request_span_guard = request_span.enter();
-
-    // We do not call `.enter` on query_span!
-    // `.instrument` takes care of it at the right moments
-    // in the query future lifetime
     let query_span = tracing::info_span!("Saving new subscriber details in the database");
 
     match sqlx::query!(
@@ -53,11 +45,7 @@ VALUES ($1, $2, $3, $4)
     {
         Ok(_) => HttpResponse::Ok().finish(),
         Err(e) => {
-            tracing::error!(
-                "request_id {} - Failed to execute query: {:?}",
-                request_id,
-                e
-            );
+            tracing::error!("Failed to execute query: {:?}", e);
             HttpResponse::InternalServerError().finish()
         }
     }
