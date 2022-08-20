@@ -1,5 +1,6 @@
 //! src/health_check.rs
 use newsletter::configuration::get_configuration;
+use newsletter::email_client::EmailClient;
 use newsletter::startup::run;
 use newsletter::telemetry::{get_subscriber, init_subscriber};
 use secrecy::ExposeSecret;
@@ -17,8 +18,19 @@ async fn main() -> std::io::Result<()> {
         PgPool::connect(&configuration.database.connection_string().expose_secret())
             .await
             .expect("Failed to connect to Postgres.");
-    let address = format!("127.0.0.1:{}", configuration.application_port);
+
+    // Build an `EmailClient` using `configuration`
+    let sender_email = configuration
+        .email_client
+        .sender()
+        .expect("Invalid sender email address.");
+    let email_client = EmailClient::new(configuration.email_client.base_url, sender_email);
+
+    let address = format!(
+        "{}{}",
+        configuration.application.host, configuration.application.port
+    );
     let listener = TcpListener::bind(address)?;
 
-    run(listener, connection_pool)?.await
+    run(listener, connection_pool, email_client)?.await
 }
